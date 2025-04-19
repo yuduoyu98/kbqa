@@ -1,0 +1,6 @@
+data/
+example/
+tmp/
+__pycache__
+
+.*

@@ -1,0 +1,12 @@
+[api]
+API_KEY = "sk-olcxfdwhydoqndrutwriusyobofmmyorjpbwdcitskcopuxx"
+
+[preprocess]
+max_chunk_size = 1000
+
+
+[common]
+top_k = 5
+test_data_path = "data/test.jsonl"
+train_data_path = "data/train.jsonl"
+val_data_path = "data/val.jsonl"
