@@ -1,6 +1,11 @@
 data/
 example/
 tmp/
+indexes/
+result/
 __pycache__
 
 .*
+
+*.zip
+

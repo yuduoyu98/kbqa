@@ -4,6 +4,14 @@ API_KEY = "sk-olcxfdwhydoqndrutwriusyobofmmyorjpbwdcitskcopuxx"
 [preprocess]
 max_chunk_size = 1000
 
+[tfidf]
+
+
+[bm25]
+k1 = 1.5
+b = 0.75
+epsilon = 0.25
+save_index_path = "indexes/bm25_index"
 
 [common]
 top_k = 5
