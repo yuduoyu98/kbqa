@@ -36,32 +36,35 @@ function App() {
       }]);
     }
     
-    // Simulate API call with setTimeout
-    setTimeout(() => {
-      const data = mockData[searchMode];
+    try {
+      const response = await fetch('http://localhost:5000/api/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: inputQuestion,
+          mode: searchMode
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
       setResults(data);
+    } catch (error) {
+      console.error('Error fetching results:', error);
+      // Show error alert instead of using mock data
+      alert(`Error: ${error.message || 'Failed to connect to the server. Please try again later.'}`);
+      setShowAnimation(false);
       setLoading(false);
-    }, 1000);
-
-    // For future real API implementation
-    // try {
-    //   const response = await fetch('/api/search', {
-    //     method: 'POST',
-    //     headers: {
-    //       'Content-Type': 'application/json',
-    //     },
-    //     body: JSON.stringify({
-    //       question: inputQuestion,
-    //       mode: searchMode
-    //     }),
-    //   });
-    //   const data = await response.json();
-    //   setResults(data);
-    // } catch (error) {
-    //   console.error('Error fetching results:', error);
-    // } finally {
-    //   setLoading(false);
-    // }
+      return;
+    }
+    
+    setLoading(false);
   };
 
   const resetSearch = () => {
