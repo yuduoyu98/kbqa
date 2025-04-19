@@ -3,6 +3,7 @@ example/
 tmp/
 indexes/
 result/
+model/
 __pycache__
 
 .*

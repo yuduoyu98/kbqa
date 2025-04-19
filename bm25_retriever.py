@@ -8,10 +8,14 @@ from typing import Dict, List, Set, Tuple
 
 import nltk
 import numpy as np
+import requests
 import tomli
 from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
+
+# 导入API客户端
+from api_client import SiliconFlowClient
 
 # 确保下载必要的NLTK资源
 nltk.download("punkt", quiet=True)
@@ -361,6 +365,39 @@ def main():
 
     # Path to documents
     docs_path = "tmp/document_chunked_cleaned.jsonl"
+    original_docs_path = "tmp/document_chunked_original.jsonl"
+
+    # Load original documents to get chunk content
+    print(f"Loading original documents from {original_docs_path}...")
+    original_docs = {}
+    original_chunks = {}
+
+    try:
+        # 加载原始文档数据
+        original_doc_data = load_jsonl(original_docs_path)
+        for doc in original_doc_data:
+            doc_id = doc["document_id"]
+            original_docs[doc_id] = doc
+            # 建立doc_id和chunk_id到chunk内容的映射
+            for chunk in doc["chunks"]:
+                chunk_key = (doc_id, chunk["chunk_id"])
+                original_chunks[chunk_key] = chunk
+    except FileNotFoundError:
+        print(f"Warning: Original document file {original_docs_path} not found.")
+        print("Using example/document_chunked_original.jsonl as fallback.")
+        # 尝试使用样例数据作为回退选项
+        try:
+            original_doc_data = load_jsonl("example/document_chunked_original.jsonl")
+            for doc in original_doc_data:
+                doc_id = doc["document_id"]
+                original_docs[doc_id] = doc
+                # 建立doc_id和chunk_id到chunk内容的映射
+                for chunk in doc["chunks"]:
+                    chunk_key = (doc_id, chunk["chunk_id"])
+                    original_chunks[chunk_key] = chunk
+        except FileNotFoundError:
+            print("Error: Could not find any original document files.")
+            return
 
     # Check if index file exists
     index_path = bm25_config.get("save_index_path", "indexes/bm25_index")
@@ -378,6 +415,10 @@ def main():
         print(f"Saving BM25 index to {index_path}...")
         bm25.save(index_path)
 
+    # Initialize SiliconFlow API client
+    print("Initializing SiliconFlow API client...")
+    api_client = SiliconFlowClient()
+
     # Load validation data
     val_path = common_config.get("val_data_path", "data/val.jsonl")
     val_data = load_jsonl(val_path)
@@ -392,7 +433,7 @@ def main():
     print(f"Generating predictions for {len(val_data)} validation queries...")
     for i, item in enumerate(val_data):
         query = item["question"]
-        answer = item["answer"]
+        original_answer = item["answer"]
         true_doc_id = item["document_id"]
 
         # 预处理查询词
@@ -414,14 +455,40 @@ def main():
         top_docs = sorted_docs[:top_k]
         document_ids = [doc_id for doc_id, _ in top_docs]
 
+        # 收集前top_k个chunk的内容作为上下文
+        context_chunks = []
+        for doc_id, (chunk_id, score, title) in top_docs:
+            chunk_key = (doc_id, chunk_id)
+            if chunk_key in original_chunks:
+                chunk = original_chunks[chunk_key]
+                context_chunks.append(chunk["content"])
+
+        # 使用SiliconFlow API生成回答
+        if context_chunks:
+            print(f"Generating answer for query {i+1}: {query}")
+            generated_answer = api_client.generate_answer(
+                question=query,
+                context=context_chunks[:3],  # 使用前3个最相关的chunk
+                max_tokens=150,
+                temperature=0.3,
+            )
+        else:
+            generated_answer = "抱歉，我无法回答这个问题。"
+
         # 格式化预测结果
-        prediction = {"question": query, "answer": answer, "document_id": document_ids}
+        prediction = {
+            "question": query,
+            "answer": generated_answer,  # 使用生成的回答
+            "document_id": document_ids,
+        }
         predictions.append(prediction)
 
-        # 为每个查询保存详细结果（移除found字段，添加query_terms字段）
+        # 为每个查询保存详细结果
         result_entry = {
             "question": query,
-            "query_terms": query_terms,  # 添加预处理后的查询词
+            "query_terms": query_terms,
+            "original_answer": original_answer,
+            "generated_answer": generated_answer,
             "doc_id": true_doc_id,
             "predict": [
                 {"doc_id": doc_id, "chunk_id": chunk_id, "score": score, "title": title}
@@ -431,10 +498,10 @@ def main():
         query_results.append(result_entry)
 
         # 打印进度
-        if (i + 1) % 100 == 0:
+        if (i + 1) % 10 == 0:
             print(f"Processed {i+1}/{len(val_data)} queries")
 
-    # 计算指标时需要调整
+    # 计算文档召回指标
     recall_count = 0
     mrr_sum = 0
     for r in query_results:
@@ -457,13 +524,13 @@ def main():
     print(f"Document Retrieval MRR@{top_k}:    {mrr_k:.4f}")
     print(f"Documents not found: {len(query_results) - recall_count}/{len(val_data)}")
 
-    # 保存所有查询的详细结果
-    results_path = "result/query_results.jsonl"
+    # 保存所有查询的详细结果（包含生成的回答）
+    results_path = "result/query_results_with_llm.jsonl"
     with open(results_path, "w", encoding="utf-8") as f:
         for result in query_results:
             f.write(json.dumps(result) + "\n")
 
-    print(f"Detailed results for all queries saved to {results_path}")
+    print(f"Detailed results with generated answers saved to {results_path}")
 
     # 保存预测结果
     output_path = "result/val_predict.jsonl"
@@ -471,7 +538,7 @@ def main():
         for pred in predictions:
             f.write(json.dumps(pred) + "\n")
 
-    print(f"Predictions saved to {output_path}")
+    print(f"Predictions with LLM-generated answers saved to {output_path}")
 
 
 if __name__ == "__main__":

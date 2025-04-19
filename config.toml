@@ -4,14 +4,19 @@ API_KEY = "sk-olcxfdwhydoqndrutwriusyobofmmyorjpbwdcitskcopuxx"
 [preprocess]
 max_chunk_size = 1000
 
-[tfidf]
-
-
 [bm25]
 k1 = 1.5
 b = 0.75
 epsilon = 0.25
 save_index_path = "indexes/bm25_index"
+
+[word2vec]
+glove_path = "model/glove.6B.300d.txt" 
+vector_dim = 300
+use_preprocessing = true                        
+tfidf_weighting = true                 
+save_index_path = "indexes/word2vec_index.faiss"          
+save_metadata_path = "indexes/word2vec_metadata.json" 
 
 [common]
 top_k = 5
