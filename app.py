@@ -14,6 +14,7 @@ from api_client import SiliconFlowClient
 
 # Import the retrievers and API client
 from bm25_retriever import BM25
+from colbert_retriever import ColBERTRetriever
 from word2vec_retriever import Word2VecRetriever
 
 # Load configuration
@@ -23,6 +24,13 @@ with open("config.toml", "rb") as f:
 # Get backend configuration
 backend_config = config.get("backend", {})
 
+# Get model loading controls
+load_bm25 = backend_config.get(
+    "load_bm25", True
+)  # Default to True for backward compatibility
+load_glove = backend_config.get("load_glove", True)
+load_colbert = backend_config.get("load_colbert", True)
+
 # Get index paths from backend configuration
 bm25_index_path = backend_config.get("bm25_index_path", "indexes/bm25_index")
 word2vec_index_path = backend_config.get(
@@ -30,6 +38,16 @@ word2vec_index_path = backend_config.get(
 )
 word2vec_metadata_path = backend_config.get(
     "word2vec_metadata_path", "indexes/word2vec_metadata.json"
+)
+colbert_model_path = backend_config.get(
+    "colbert_model_path", "indexes/colbert/colbert_model.pt"
+)
+colbert_index_path = backend_config.get(
+    "colbert_index_path", "indexes/colbert/corpus_index.faiss"
+)
+colbert_ids_path = backend_config.get(
+    "colbert_ids_path",
+    "indexes/corpus_encodings/corpus_embeddings_20250420_114811_ids.json",
 )
 
 # Server configuration
@@ -40,6 +58,7 @@ debug = backend_config.get("debug", True)
 # Initialize retrievers
 bm25_retriever = None
 word2vec_retriever = None
+colbert_retriever = None
 
 # Original documents data
 original_docs = {}
@@ -58,32 +77,67 @@ def create_app():
 
 
 def initialize_retrievers():
-    global bm25_retriever, word2vec_retriever
+    global bm25_retriever, word2vec_retriever, colbert_retriever
 
-    # Initialize BM25 retriever
-    if os.path.exists(bm25_index_path):
-        try:
-            bm25_retriever = BM25()
-            bm25_retriever.load(bm25_index_path)
-            print(f"BM25 retriever initialized successfully from {bm25_index_path}")
-        except Exception as e:
-            print(f"Error initializing BM25 retriever: {e}")
+    # Initialize BM25 retriever if enabled
+    if load_bm25:
+        if os.path.exists(bm25_index_path):
+            try:
+                bm25_retriever = BM25()
+                bm25_retriever.load(bm25_index_path)
+                print(f"BM25 retriever initialized successfully from {bm25_index_path}")
+            except Exception as e:
+                print(f"Error initializing BM25 retriever: {e}")
+        else:
+            print(f"Warning: BM25 index not found at {bm25_index_path}")
     else:
-        print(f"Warning: BM25 index not found at {bm25_index_path}")
+        print("BM25 retriever loading disabled in config")
 
-    # Initialize Word2Vec (GloVe) retriever if index exists
-    if os.path.exists(word2vec_index_path) and os.path.exists(word2vec_metadata_path):
-        try:
-            # Initialize Word2Vec retriever with config
-            word2vec_retriever = Word2VecRetriever(config)
-            word2vec_retriever.load()
-            print(
-                f"Word2Vec (GloVe) retriever initialized successfully from {word2vec_index_path}"
-            )
-        except Exception as e:
-            print(f"Error initializing Word2Vec retriever: {e}")
+    # Initialize Word2Vec (GloVe) retriever if enabled
+    if load_glove:
+        if os.path.exists(word2vec_index_path) and os.path.exists(
+            word2vec_metadata_path
+        ):
+            try:
+                # Initialize Word2Vec retriever with config
+                word2vec_retriever = Word2VecRetriever(config)
+                word2vec_retriever.load()
+                print(
+                    f"Word2Vec (GloVe) retriever initialized successfully from {word2vec_index_path}"
+                )
+            except Exception as e:
+                print(f"Error initializing Word2Vec retriever: {e}")
+        else:
+            print(f"Warning: Word2Vec index not found at {word2vec_index_path}")
     else:
-        print(f"Warning: Word2Vec index not found at {word2vec_index_path}")
+        print("Word2Vec (GloVe) retriever loading disabled in config")
+
+    # Initialize ColBERT retriever if enabled
+    if load_colbert:
+        if os.path.exists(colbert_index_path) and os.path.exists(colbert_ids_path):
+            try:
+                # Update config with correct paths
+                config.setdefault("colbert", {})
+                config["colbert"]["model_path"] = colbert_model_path
+                config["colbert"]["faiss_index_path"] = colbert_index_path
+                config["colbert"]["corpus_ids_path"] = colbert_ids_path
+
+                # Initialize ColBERT retriever with config
+                colbert_retriever = ColBERTRetriever(config)
+                if colbert_retriever.load():
+                    print(
+                        f"ColBERT retriever initialized successfully from {colbert_index_path}"
+                    )
+                else:
+                    colbert_retriever = None
+                    print("Failed to initialize ColBERT retriever")
+            except Exception as e:
+                print(f"Error initializing ColBERT retriever: {e}")
+                colbert_retriever = None
+        else:
+            print(f"Warning: ColBERT index not found at {colbert_index_path}")
+    else:
+        print("ColBERT retriever loading disabled in config")
 
 
 def load_original_documents():
@@ -131,22 +185,21 @@ def search():
             return jsonify({"error": "BM25 retriever not initialized"}), 500
 
         # Search with BM25
-        results = bm25_retriever.search(question, top_k=50)
+        results = bm25_retriever.search(question, top_k=3)
 
     elif model_type == "glove":
         if word2vec_retriever is None:
             return jsonify({"error": "Word2Vec (GloVe) retriever not initialized"}), 500
 
         # Search with Word2Vec (GloVe)
-        results = word2vec_retriever.search(question, top_k=50)
+        results = word2vec_retriever.search(question, top_k=3)
 
     elif model_type == "colbert":
-        # For now, we'll use BM25 as a fallback
-        if bm25_retriever is None:
-            return jsonify({"error": "BM25 retriever not initialized"}), 500
+        if colbert_retriever is None:
+            return jsonify({"error": "ColBERT retriever not initialized"}), 500
 
-        results = bm25_retriever.search(question, top_k=50)
-
+        # Search with ColBERT
+        results = colbert_retriever.search(question, top_k=3)
     else:
         return jsonify({"error": f"Unknown search mode: {model_type}"}), 400
 

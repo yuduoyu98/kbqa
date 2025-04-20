@@ -5,10 +5,17 @@ API_KEY = "sk-olcxfdwhydoqndrutwriusyobofmmyorjpbwdcitskcopuxx"
 max_chunk_size = 1000
 
 [backend]
+# model loading controls
+load_bm25 = true
+load_glove = true
+load_colbert = true
 # indexes
 bm25_index_path = "indexes/bm25_index"
 word2vec_index_path = "indexes/word2vec_index.faiss" 
 word2vec_metadata_path = "indexes/word2vec_metadata.json"
+colbert_model_path = "indexes/colbert/colbert_model.pt"
+colbert_index_path = "indexes/colbert/corpus_index.faiss"
+colbert_ids_path = "indexes/colbert/corpus_embeddings_20250420_114811_ids.json"
 # server
 host = "0.0.0.0"
 port = 5000
@@ -27,6 +34,14 @@ use_preprocessing = true
 tfidf_weighting = true                 
 save_index_path = "indexes/word2vec_index.faiss"          
 save_metadata_path = "indexes/word2vec_metadata.json" 
+
+[colbert]
+model_path = "indexes/colbert/colbert_model.pt"
+faiss_index_path = "indexes/colbert/corpus_index.faiss"
+corpus_ids_path = "indexes/colbert/corpus_embeddings_20250420_114811_ids.json"
+vector_dim = 128
+max_query_length = 64
+bert_model = "bert-base-uncased"
 
 [common]
 top_k = 5

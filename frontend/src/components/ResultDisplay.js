@@ -1,46 +1,66 @@
 import React, { useState } from 'react';
 
 const ResultDisplay = ({ results, question, isHistoryItem = false }) => {
-  const { answer, documents } = results;
+  const { answer, documents, isError, hasRefreshButton, originalQuestion } = results;
   const [isExpanded, setIsExpanded] = useState(false);
-  const [showReferences, setShowReferences] = useState(!isHistoryItem);
+  const [showReferences, setShowReferences] = useState(!isHistoryItem && documents.length > 0);
+
+  // Handle refresh button click
+  const handleRefresh = () => {
+    if (originalQuestion && window.onSearchRetry) {
+      window.onSearchRetry(originalQuestion);
+    }
+  };
 
   return (
     <div className="space-y-3">
-      {/* Answer Section */}
-      <div className="text-gray-800">
+      {/* Answer Section - 错误消息显示为红色 */}
+      <div className={isError ? "text-red-600 font-medium flex items-center" : "text-gray-800"}>
         <p className="text-base leading-relaxed">{answer}</p>
+        {hasRefreshButton && (
+          <button 
+            onClick={handleRefresh}
+            className="ml-3 text-gray-600 hover:text-gray-900 focus:outline-none"
+            title="Try again"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        )}
       </div>
       
-      {/* References toggle button */}
-      <div className="flex items-center">
-        <button 
-          onClick={() => setShowReferences(!showReferences)} 
-          className="text-primary-600 hover:text-primary-800 text-sm font-medium flex items-center"
-        >
-          <span className="flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            References
-          </span>
-          <span className="ml-2 bg-gray-100 text-xs font-semibold px-2.5 py-0.5 rounded-full">
-            {documents.length}
-          </span>
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" 
-            className={`h-4 w-4 ml-2 transition-transform duration-200 ${showReferences ? 'rotate-180' : ''}`} 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
+      {/* References toggle button - 只有在有文档且不是错误时显示 */}
+      {documents.length > 0 && !isError && (
+        <div className="flex items-center">
+          <button 
+            onClick={() => setShowReferences(!showReferences)} 
+            className="text-primary-600 hover:text-primary-800 text-sm font-medium flex items-center"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-      </div>
+            <span className="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              References
+            </span>
+            <span className="ml-2 bg-gray-100 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+              {documents.length}
+            </span>
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className={`h-4 w-4 ml-2 transition-transform duration-200 ${showReferences ? 'rotate-180' : ''}`} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+      )}
 
-      {/* Document References */}
-      {showReferences && (
+      {/* Document References - 只有在有文档且未发生错误时显示 */}
+      {showReferences && documents.length > 0 && !isError && (
         <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-100">
           <div className="space-y-3">
             {documents.map((doc, index) => (

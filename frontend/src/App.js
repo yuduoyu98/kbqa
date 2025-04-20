@@ -11,6 +11,18 @@ function App() {
   const [searchHistory, setSearchHistory] = useState([]);
   const [showAnimation, setShowAnimation] = useState(false);
   const mainContentRef = useRef(null);
+  const [theme, setTheme] = useState(
+    localStorage.getItem('theme') || 'light'
+  );
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Implement onSearchRetry function
+  window.onSearchRetry = (originalQuestion) => {
+    if (originalQuestion) {
+      setQuestion(originalQuestion);
+      handleSearch(originalQuestion);
+    }
+  };
 
   // Scroll to bottom when results change
   useEffect(() => {
@@ -23,6 +35,8 @@ function App() {
   }, [results, searchHistory, showAnimation]);
 
   const handleSearch = async (inputQuestion) => {
+    if (!inputQuestion.trim()) return;
+    
     setLoading(true);
     setQuestion(inputQuestion);
     setShowAnimation(true);
@@ -48,20 +62,46 @@ function App() {
         }),
       });
       
+      let data;
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        // 尝试解析错误响应
+        try {
+          const errorData = await response.json();
+          // 创建一个带有错误信息的结果对象，而不是弹窗
+          data = {
+            answer: `Oops! Our servers are on a coffee break. Please try again later!`,
+            documents: [],
+            isError: true, // 添加错误标记
+            hasRefreshButton: true, // 添加刷新按钮标记
+            originalQuestion: inputQuestion // 保存原始问题以便重试
+          };
+        } catch (parseError) {
+          // 如果无法解析JSON，使用通用错误消息
+          data = {
+            answer: `Oops! Our servers are on a coffee break. Please try again later!`,
+            documents: [],
+            isError: true,
+            hasRefreshButton: true,
+            originalQuestion: inputQuestion
+          };
+        }
+      } else {
+        // 解析成功响应
+        data = await response.json();
       }
       
-      const data = await response.json();
       setResults(data);
     } catch (error) {
       console.error('Error fetching results:', error);
-      // Show error alert instead of using mock data
-      alert(`Error: ${error.message || 'Failed to connect to the server. Please try again later.'}`);
-      setShowAnimation(false);
-      setLoading(false);
-      return;
+      // 不使用alert，而是创建一个带有错误信息的结果对象
+      setResults({
+        answer: `Oops! Our servers are on a coffee break. Please try again later!`,
+        documents: [],
+        isError: true,
+        hasRefreshButton: true,
+        originalQuestion: inputQuestion
+      });
     }
     
     setLoading(false);
