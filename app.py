@@ -20,11 +20,25 @@ from word2vec_retriever import Word2VecRetriever
 with open("config.toml", "rb") as f:
     config = tomli.load(f)
 
-# Initialize the BM25 retriever
-bm25_index_path = config["bm25"].get("save_index_path", "indexes/bm25_index")
-bm25_retriever = None
+# Get backend configuration
+backend_config = config.get("backend", {})
 
-# Initialize the Word2Vec (GloVe) retriever
+# Get index paths from backend configuration
+bm25_index_path = backend_config.get("bm25_index_path", "indexes/bm25_index")
+word2vec_index_path = backend_config.get(
+    "word2vec_index_path", "indexes/word2vec_index.faiss"
+)
+word2vec_metadata_path = backend_config.get(
+    "word2vec_metadata_path", "indexes/word2vec_metadata.json"
+)
+
+# Server configuration
+host = backend_config.get("host", "0.0.0.0")
+port = backend_config.get("port", 5000)
+debug = backend_config.get("debug", True)
+
+# Initialize retrievers
+bm25_retriever = None
 word2vec_retriever = None
 
 # Original documents data
@@ -46,37 +60,18 @@ def create_app():
 def initialize_retrievers():
     global bm25_retriever, word2vec_retriever
 
-    # Check if we should use parent paths
-    if not os.path.exists(bm25_index_path) and os.path.exists(f"../{bm25_index_path}"):
-        parent_bm25_path = f"../{bm25_index_path}"
-    else:
-        parent_bm25_path = bm25_index_path
-
     # Initialize BM25 retriever
-    if os.path.exists(parent_bm25_path):
-        bm25_retriever = BM25()
-        bm25_retriever.load(parent_bm25_path)
-        print(f"BM25 retriever initialized successfully from {parent_bm25_path}")
+    if os.path.exists(bm25_index_path):
+        try:
+            bm25_retriever = BM25()
+            bm25_retriever.load(bm25_index_path)
+            print(f"BM25 retriever initialized successfully from {bm25_index_path}")
+        except Exception as e:
+            print(f"Error initializing BM25 retriever: {e}")
     else:
-        print(f"Warning: BM25 index not found at {parent_bm25_path}")
+        print(f"Warning: BM25 index not found at {bm25_index_path}")
 
     # Initialize Word2Vec (GloVe) retriever if index exists
-    word2vec_index_path = config["word2vec"].get(
-        "save_index_path", "indexes/word2vec_index.faiss"
-    )
-    word2vec_metadata_path = config["word2vec"].get(
-        "save_metadata_path", "indexes/word2vec_metadata.json"
-    )
-
-    # Check if we should use parent paths
-    if (
-        not os.path.exists(word2vec_index_path)
-        and os.path.exists(f"../{word2vec_index_path}")
-        and os.path.exists(f"../{word2vec_metadata_path}")
-    ):
-        word2vec_index_path = f"../{word2vec_index_path}"
-        word2vec_metadata_path = f"../{word2vec_metadata_path}"
-
     if os.path.exists(word2vec_index_path) and os.path.exists(word2vec_metadata_path):
         try:
             # Initialize Word2Vec retriever with config
@@ -97,12 +92,6 @@ def load_original_documents():
 
     original_docs_path = "tmp/document_chunked_original.jsonl"
 
-    # Check if we should use parent path
-    if not os.path.exists(original_docs_path) and os.path.exists(
-        f"../{original_docs_path}"
-    ):
-        original_docs_path = f"../{original_docs_path}"
-
     try:
         # Load original document data
         with open(original_docs_path, "r", encoding="utf-8") as f:
@@ -119,35 +108,10 @@ def load_original_documents():
         )
     except FileNotFoundError:
         print(f"Warning: Original document file {original_docs_path} not found.")
-        print("Using example/document_chunked_original.jsonl as fallback.")
-        try:
-            # Try fallback to example directory
-            fallback_path = "example/document_chunked_original.jsonl"
-            if not os.path.exists(fallback_path) and os.path.exists(
-                f"../{fallback_path}"
-            ):
-                fallback_path = f"../{fallback_path}"
-
-            with open(fallback_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    doc = json.loads(line)
-                    doc_id = doc["document_id"]
-                    original_docs[doc_id] = doc
-                    # Map doc_id and chunk_id to chunk content
-                    for chunk in doc["chunks"]:
-                        chunk_key = (doc_id, chunk["chunk_id"])
-                        original_chunks[chunk_key] = chunk
-            print(
-                f"Loaded {len(original_docs)} documents and {len(original_chunks)} chunks from example directory"
-            )
-        except FileNotFoundError:
-            print("Error: Could not find any original document files.")
 
 
 # Initialize API client
-api_client = SiliconFlowClient(
-    "../config.toml" if os.path.exists("../config.toml") else "config.toml"
-)
+api_client = SiliconFlowClient("config.toml")
 
 # Create the Flask app
 app = create_app()
@@ -177,29 +141,23 @@ def search():
         results = word2vec_retriever.search(question, top_k=50)
 
     elif model_type == "colbert":
-        # To be implemented
-        return jsonify({"error": "ColBERT search not implemented yet"}), 501
+        # For now, we'll use BM25 as a fallback
+        if bm25_retriever is None:
+            return jsonify({"error": "BM25 retriever not initialized"}), 500
+
+        results = bm25_retriever.search(question, top_k=50)
 
     else:
         return jsonify({"error": f"Unknown search mode: {model_type}"}), 400
 
-    # Get each document's highest scoring chunk
-    doc_scores = {}
-    for doc_id, chunk_id, score, title in results:
-        if doc_id not in doc_scores or score > doc_scores[doc_id][1]:
-            doc_scores[doc_id] = (chunk_id, score, title)
-
-    # Sort by score
-    sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1][1], reverse=True)
-
-    # Get top 5 results
-    top_docs = sorted_docs[:5]
+    # Get top 3 chunks directly, no need to group by document
+    top_chunks = results[:3]  # Take the first 3 chunks directly
 
     # Collect context chunks for LLM
     context_chunks = []
     documents = []
 
-    for doc_id, (chunk_id, score, title) in top_docs:
+    for doc_id, chunk_id, score, title in top_chunks:
         chunk_key = (doc_id, chunk_id)
         if chunk_key in original_chunks:
             chunk = original_chunks[chunk_key]
@@ -218,12 +176,16 @@ def search():
 
     # Generate answer with LLM
     if context_chunks:
-        generated_answer = api_client.generate_answer(
-            question=question,
-            context=context_chunks[:3],  # Use top 3 most relevant chunks
-            max_tokens=150,
-            temperature=0.3,
-        )
+        try:
+            generated_answer = api_client.generate_answer(
+                question=question,
+                context=context_chunks,  # Use all top 3 chunks
+                max_tokens=150,
+                temperature=0.3,
+            )
+        except Exception as e:
+            print(f"Error generating answer: {e}")
+            generated_answer = "Sorry, there was an error generating an answer."
     else:
         generated_answer = (
             "Sorry, I couldn't find relevant information to answer this question."
@@ -236,5 +198,5 @@ def search():
 
 
 if __name__ == "__main__":
-    # Make sure the app is created and everything is initialized before running
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    # Use server configuration
+    app.run(debug=debug, host=host, port=port)

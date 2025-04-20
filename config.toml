@@ -4,6 +4,16 @@ API_KEY = "sk-olcxfdwhydoqndrutwriusyobofmmyorjpbwdcitskcopuxx"
 [preprocess]
 max_chunk_size = 1000
 
+[backend]
+# indexes
+bm25_index_path = "indexes/bm25_index"
+word2vec_index_path = "indexes/word2vec_index.faiss" 
+word2vec_metadata_path = "indexes/word2vec_metadata.json"
+# server
+host = "0.0.0.0"
+port = 5000
+debug = false
+
 [bm25]
 k1 = 1.5
 b = 0.75

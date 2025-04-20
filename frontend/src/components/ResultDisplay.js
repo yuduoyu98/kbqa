@@ -56,6 +56,37 @@ const ResultDisplay = ({ results, question, isHistoryItem = false }) => {
 const DocumentItem = ({ document, isFirst }) => {
   const [expanded, setExpanded] = useState(isFirst);
   const { title, content, score, doc_id, chunk_id } = document;
+  const lineThreshold = 100;
+  
+  // 格式化标题：根据长度和>符号判断如何显示
+  const formatTitle = (title) => {
+    // 如果标题不够长，直接显示完整标题
+    if (title.length <= lineThreshold) {
+      return title;
+    }
+    
+    // 如果标题中包含>符号
+    if (title.includes('>')) {
+      const parts = title.split('>');
+      
+      // 如果只有一个>，则正常显示，但如果超过60字符还是需要截断
+      if (parts.length <= 2) {
+        return title.length > lineThreshold ? title.substring(0, lineThreshold-3) + '...' : title;
+      }
+      
+      // 提取第一部分和最后部分
+      const firstPart = parts[0].trim();
+      const lastPart = parts[parts.length - 1].trim();
+      
+      return `${firstPart} > ... > ${lastPart}`;
+    }
+    
+    // 如果没有>符号但标题过长，使用截断
+    return title.substring(0, lineThreshold - 3) + '...';
+  };
+  
+  // 应用标题格式化
+  const displayTitle = formatTitle(title);
   
   // Truncate content for preview
   const previewContent = content.length > 150 
@@ -68,8 +99,13 @@ const DocumentItem = ({ document, isFirst }) => {
         className="flex justify-between items-center px-3 py-2 cursor-pointer hover:bg-gray-50"
         onClick={() => setExpanded(!expanded)}
       >
-        <div className="font-medium text-gray-700 text-sm flex-1">{title}</div>
-        <div className="flex items-center">
+        <div 
+          className="font-medium text-gray-700 text-sm flex-1 truncate" 
+          title={title}
+        >
+          {displayTitle}
+        </div>
+        <div className="flex items-center flex-shrink-0">
           <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 mr-2">
             {score.toFixed(2)}
           </span>
