@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import re
@@ -346,6 +347,18 @@ def calculate_metrics(predictions, top_k=5):
 
 
 def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description="BM25 retriever for document retrieval and answering"
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["val", "test"],
+        default="val",
+        help="Run on validation or test data",
+    )
+    args = parser.parse_args()
+
     # Load configuration
     with open("config.toml", "rb") as f:
         config = tomli.load(f)
@@ -419,9 +432,20 @@ def main():
     print("Initializing SiliconFlow API client...")
     api_client = SiliconFlowClient()
 
-    # Load validation data
-    val_path = common_config.get("val_data_path", "data/val.jsonl")
-    val_data = load_jsonl(val_path)
+    # Determine the data path based on mode
+    if args.mode == "val":
+        data_path = common_config.get("val_data_path", "data/val.jsonl")
+        output_path = "result/val_predict.jsonl"
+        results_path = "result/query_results_with_llm.jsonl"
+        print(f"Running in validation mode using {data_path}")
+    else:  # test mode
+        data_path = common_config.get("test_data_path", "data/test.jsonl")
+        output_path = "result/test_predict.jsonl"
+        results_path = "result/test_query_results_with_llm.jsonl"
+        print(f"Running in test mode using {data_path}")
+
+    # Load data
+    data = load_jsonl(data_path)
 
     # Number of top documents to retrieve
     top_k = common_config.get("top_k", 5)
@@ -430,11 +454,13 @@ def main():
     predictions = []
     query_results = []  # 存储所有查询的详细结果
 
-    print(f"Generating predictions for {len(val_data)} validation queries...")
-    for i, item in enumerate(val_data):
+    print(f"Generating predictions for {len(data)} queries...")
+    for i, item in enumerate(data):
         query = item["question"]
-        original_answer = item["answer"]
-        true_doc_id = item["document_id"]
+
+        # For validation data, we have the ground truth
+        true_doc_id = item.get("document_id", None)
+        original_answer = item.get("answer", None)
 
         # 预处理查询词
         query_terms = bm25.preprocess_query(query)
@@ -489,43 +515,48 @@ def main():
             "query_terms": query_terms,
             "original_answer": original_answer,
             "generated_answer": generated_answer,
-            "doc_id": true_doc_id,
             "predict": [
                 {"doc_id": doc_id, "chunk_id": chunk_id, "score": score, "title": title}
                 for doc_id, (chunk_id, score, title) in top_docs
             ],
         }
+
+        # Only add true_doc_id if it exists (validation mode)
+        if true_doc_id is not None:
+            result_entry["doc_id"] = true_doc_id
+
         query_results.append(result_entry)
 
         # 打印进度
         if (i + 1) % 10 == 0:
-            print(f"Processed {i+1}/{len(val_data)} queries")
+            print(f"Processed {i+1}/{len(data)} queries")
 
-    # 计算文档召回指标
-    recall_count = 0
-    mrr_sum = 0
-    for r in query_results:
-        true_doc_id = r["doc_id"]
-        doc_ids = [item["doc_id"] for item in r["predict"]]
+    # 只在验证模式下计算指标
+    if args.mode == "val" and all(r.get("doc_id") is not None for r in query_results):
+        # 计算文档召回指标
+        recall_count = 0
+        mrr_sum = 0
+        for r in query_results:
+            true_doc_id = r["doc_id"]
+            doc_ids = [item["doc_id"] for item in r["predict"]]
 
-        # Recall@k
-        if true_doc_id in doc_ids:
-            recall_count += 1
+            # Recall@k
+            if true_doc_id in doc_ids:
+                recall_count += 1
 
-            # MRR@k
-            rank = doc_ids.index(true_doc_id) + 1
-            mrr_sum += 1.0 / rank
+                # MRR@k
+                rank = doc_ids.index(true_doc_id) + 1
+                mrr_sum += 1.0 / rank
 
-    recall_k = recall_count / len(query_results)
-    mrr_k = mrr_sum / len(query_results)
+        recall_k = recall_count / len(query_results)
+        mrr_k = mrr_sum / len(query_results)
 
-    print("\n===== Evaluation Results =====")
-    print(f"Document Retrieval Recall@{top_k}: {recall_k:.4f}")
-    print(f"Document Retrieval MRR@{top_k}:    {mrr_k:.4f}")
-    print(f"Documents not found: {len(query_results) - recall_count}/{len(val_data)}")
+        print("\n===== Evaluation Results =====")
+        print(f"Document Retrieval Recall@{top_k}: {recall_k:.4f}")
+        print(f"Document Retrieval MRR@{top_k}:    {mrr_k:.4f}")
+        print(f"Documents not found: {len(query_results) - recall_count}/{len(data)}")
 
     # 保存所有查询的详细结果（包含生成的回答）
-    results_path = "result/query_results_with_llm.jsonl"
     with open(results_path, "w", encoding="utf-8") as f:
         for result in query_results:
             f.write(json.dumps(result) + "\n")
@@ -533,7 +564,6 @@ def main():
     print(f"Detailed results with generated answers saved to {results_path}")
 
     # 保存预测结果
-    output_path = "result/val_predict.jsonl"
     with open(output_path, "w", encoding="utf-8") as f:
         for pred in predictions:
             f.write(json.dumps(pred) + "\n")

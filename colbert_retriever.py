@@ -294,3 +294,4 @@ if __name__ == "__main__":
         for doc_id, chunk_id, score, title in results:
             print(f"  Doc ID: {doc_id}, Chunk ID: {chunk_id}, Score: {score:.4f}")
 
+

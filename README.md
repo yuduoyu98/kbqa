@@ -135,4 +135,61 @@ python colBERT/predict_colbert.py
     }
   ]
 }
-``` 
+```
+
+# BM25 Retriever
+
+This is a BM25-based document retriever and question answering system.
+
+## Requirements
+
+- Python 3.8+
+- Dependencies listed in requirements.txt
+
+## Usage
+
+The BM25 retriever supports running on both validation and test datasets:
+
+### Run on validation dataset
+
+```bash
+python bm25_retriever.py --mode val
+```
+
+This will:
+1. Load the BM25 index (or build it if not exists)
+2. Retrieve documents for queries in the validation set
+3. Generate answers using the SiliconFlow API
+4. Calculate evaluation metrics
+5. Save results to:
+   - `result/val_predict.jsonl` - Predictions with generated answers
+   - `result/query_results_with_llm.jsonl` - Detailed results
+
+### Run on test dataset
+
+```bash
+python bm25_retriever.py --mode test
+```
+
+This will:
+1. Load the BM25 index (or build it if not exists)
+2. Retrieve documents for queries in the test set
+3. Generate answers using the SiliconFlow API
+4. Save results to:
+   - `result/test_predict.jsonl` - Predictions with generated answers
+   - `result/test_query_results_with_llm.jsonl` - Detailed results
+
+## Output Format
+
+The predictions file contains entries with:
+- `question`: The original query
+- `answer`: Generated answer
+- `document_id`: List of top-k document IDs
+
+## Configuration
+
+Configuration parameters are specified in `config.toml`:
+- BM25 parameters (k1, b, epsilon)
+- Index paths
+- Top-k value for retrieval
+- Data paths 
