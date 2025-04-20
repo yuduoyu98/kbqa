@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import SearchBar from './components/SearchBar';
 import ResultDisplay from './components/ResultDisplay';
-import { mockData } from './mockData';
 
 function App() {
   const [question, setQuestion] = useState('');

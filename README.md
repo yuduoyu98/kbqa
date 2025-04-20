@@ -1,66 +1,107 @@
-# KBQA Backend
+# KBQA - Knowledge Base Question Answering System
 
-This is the backend server for the Knowledge Base Question Answering (KBQA) system.
+A question answering system with multiple retrieval models and a modern React frontend.
 
-## Features
+## Deployment Instructions
 
-The backend supports three different retrieval models:
+### Prerequisites
 
-1. **BM25**: Term-based retrieval using BM25 algorithm
-2. **GloVe**: Vector-based retrieval using GloVe embeddings 
-3. **ColBERT**: (Coming soon) Dense retrieval using the ColBERT model
+- Python 3.10.16
+- Node.js 22.13.1
+- npm 10.9.2+
 
-## Setup
+### Installation
 
-1. Install the required dependencies:
+#### Backend Setup
+
+1. Install the required Python dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Make sure the necessary indexes are built:
-
-   - BM25 index at `indexes/bm25_index`
-   - GloVe index at `indexes/word2vec_index.faiss` and `indexes/word2vec_metadata.json`
-
-   If the indexes are not built, you can build them using the commands:
-
-   ```bash
-   # Build BM25 index
-   python ../bm25_retriever.py
-   
-   # Build GloVe index
-   python ../word2vec_retriever.py
-   ```
-
-3. Make sure your `config.toml` has the correct API key for SiliconFlow:
+2. Make sure your `config.toml` has the correct API key for SiliconFlow:
 
 ```toml
 [api]
 API_KEY = "your-api-key-here"
 ```
 
-## Running the Server
+#### Frontend Setup
 
-### On Linux/Mac:
+1. Navigate to the frontend directory:
 
 ```bash
-./run.sh
+cd frontend
 ```
 
-### On Windows:
+2. Install the required npm packages:
 
-```
-run.bat
+```bash
+npm install
 ```
 
-Or start the Flask development server directly:
+### Starting the Application
+
+#### 1. Start the Backend Server
 
 ```bash
 python app.py
 ```
 
-This will start the server at http://localhost:5000.
+This will start the Flask server at http://localhost:5000.
+
+Note: you need to wait until model loaded which will take a few minitus.  
+
+#### 2. Start the Frontend Development Server
+
+In a separate terminal:
+
+```bash
+cd frontend
+npm start
+```
+
+This will start the React development server at http://localhost:3000.
+
+## Retrieval Models and Prediction Files
+
+The system supports three different retrieval models:
+
+### 1. BM25 (Term-based retrieval)
+
+- **Index Location**: [bm25 index](indexes/bm25_index)
+- **Predict result**: [bm25 prediction](result/bm25_val_predict.jsonl)
+- **Reproduce Prediction**:
+
+```bash
+python bm25_retriever.py
+```
+
+### 2. GloVe (Word2Vec embedding-based retrieval)
+
+- **Index Locations** (6B 300d Glove): 
+  - [FAISS index](indexes/word2vec_index.faiss)
+  - [metadata](indexes/word2vec_metadata.json)
+- **Predict result**: [GloVe 6B 300d prediction](result/300_word2vec_val_predict.jsonl)  
+- **Reproduce Prediction**:
+
+```bash
+python word2vec_retriever.py
+```
+
+### 3. ColBERT (Dense retrieval with contextualized embeddings)
+
+- **Index Locations**:
+  - [FAISS index](indexes/colbert/corpus_index.faiss)
+  - [model](indexes/colbert/colbert_model.pt)
+  - [corpus embeddings](indexes/colbert/corpus/)
+- **Predict result**: [ColBERT prediction](result/colbert_val_predict.jsonl)
+- **Reproduce Prediction**:
+
+```bash
+python colBERT/predict_colbert.py
+```
 
 ## API Endpoints
 
@@ -91,32 +132,7 @@ This will start the server at http://localhost:5000.
       "title": "Document Title",
       "score": 0.785,
       "content": "Document content..."
-    },
-    // More document chunks...
+    }
   ]
 }
-```
-
-## Retrieval Models
-
-### BM25
-
-BM25 is a term-based retrieval model that ranks documents based on the occurrence of query terms in each document. It considers both term frequency and document length.
-
-### GloVe (Word2Vec)
-
-The GloVe model uses word embeddings to capture semantic relationships between words. Documents are represented as the weighted average of word vectors.
-
-### ColBERT (Coming Soon)
-
-ColBERT is a neural retrieval model that performs late interaction between queries and documents using contextualized embeddings.
-
-## Testing
-
-You can test the BM25 retrieval and API integration using:
-
-```bash
-python test_bm25.py
-```
-
-This will test loading the BM25 model, searching for a sample query, and generating an answer with the LLM. 
+``` 

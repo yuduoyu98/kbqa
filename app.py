@@ -39,16 +39,6 @@ word2vec_index_path = backend_config.get(
 word2vec_metadata_path = backend_config.get(
     "word2vec_metadata_path", "indexes/word2vec_metadata.json"
 )
-colbert_model_path = backend_config.get(
-    "colbert_model_path", "indexes/colbert/colbert_model.pt"
-)
-colbert_index_path = backend_config.get(
-    "colbert_index_path", "indexes/colbert/corpus_index.faiss"
-)
-colbert_ids_path = backend_config.get(
-    "colbert_ids_path",
-    "indexes/corpus_encodings/corpus_embeddings_20250420_114811_ids.json",
-)
 
 # Server configuration
 host = backend_config.get("host", "0.0.0.0")
@@ -114,20 +104,37 @@ def initialize_retrievers():
 
     # Initialize ColBERT retriever if enabled
     if load_colbert:
-        if os.path.exists(colbert_index_path) and os.path.exists(colbert_ids_path):
-            try:
-                # Update config with correct paths
-                config.setdefault("colbert", {})
-                config["colbert"]["model_path"] = colbert_model_path
-                config["colbert"]["faiss_index_path"] = colbert_index_path
-                config["colbert"]["corpus_ids_path"] = colbert_ids_path
+        # Get ColBERT paths from config
+        colbert_config = config.get("colbert", {})
+        model_path = colbert_config.get(
+            "model_path", "indexes/colbert/colbert_model.pt"
+        )
+        index_path = colbert_config.get(
+            "faiss_index_path", "indexes/colbert/corpus_index.faiss"
+        )
+        vector_dir = colbert_config.get("colbert_vector_dir", "indexes/colbert/corpus")
 
+        # Check if required files exist
+        model_exists = os.path.exists(model_path)
+        index_exists = os.path.exists(index_path)
+        vector_dir_exists = os.path.exists(vector_dir)
+        ids_file = os.path.join(vector_dir, "corpus_embeddings_ids.json")
+        vectors_file = os.path.join(vector_dir, "corpus_embeddings_vectors.npy")
+
+        print(f"ColBERT model path: {model_path} (exists: {model_exists})")
+        print(f"ColBERT index path: {index_path} (exists: {index_exists})")
+        print(f"ColBERT vector dir: {vector_dir} (exists: {vector_dir_exists})")
+        print(f"ColBERT IDs file: {ids_file} (exists: {os.path.exists(ids_file)})")
+        print(
+            f"ColBERT vectors file: {vectors_file} (exists: {os.path.exists(vectors_file)})"
+        )
+
+        if model_exists and index_exists and vector_dir_exists:
+            try:
                 # Initialize ColBERT retriever with config
                 colbert_retriever = ColBERTRetriever(config)
                 if colbert_retriever.load():
-                    print(
-                        f"ColBERT retriever initialized successfully from {colbert_index_path}"
-                    )
+                    print(f"ColBERT retriever initialized successfully")
                 else:
                     colbert_retriever = None
                     print("Failed to initialize ColBERT retriever")
@@ -135,7 +142,9 @@ def initialize_retrievers():
                 print(f"Error initializing ColBERT retriever: {e}")
                 colbert_retriever = None
         else:
-            print(f"Warning: ColBERT index not found at {colbert_index_path}")
+            print(
+                f"Warning: Some ColBERT files are missing. Please check the paths in config.toml"
+            )
     else:
         print("ColBERT retriever loading disabled in config")
 
@@ -221,7 +230,7 @@ def search():
                 {
                     "doc_id": doc_id,
                     "chunk_id": chunk_id,
-                    "title": title,
+                    "title": title or chunk.get("title", ""),
                     "score": score,
                     "content": chunk["content"],
                 }
@@ -245,7 +254,13 @@ def search():
         )
 
     # Format response like mockData.js
-    response = {"answer": generated_answer, "documents": documents}
+    response = {
+        "answer": generated_answer,
+        "documents": documents,
+        "isError": False,
+        "hasRefreshButton": False,
+        "originalQuestion": question,
+    }
 
     return jsonify(response)
 

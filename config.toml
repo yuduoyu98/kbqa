@@ -13,9 +13,9 @@ load_colbert = true
 bm25_index_path = "indexes/bm25_index"
 word2vec_index_path = "indexes/word2vec_index.faiss" 
 word2vec_metadata_path = "indexes/word2vec_metadata.json"
-colbert_model_path = "indexes/colbert/colbert_model.pt"
 colbert_index_path = "indexes/colbert/corpus_index.faiss"
-colbert_ids_path = "indexes/colbert/corpus_embeddings_20250420_114811_ids.json"
+colbert_model_path = "indexes/colbert/colbert_model.pt"
+colbert_vector_dir = "indexes/colbert/corpus"
 # server
 host = "0.0.0.0"
 port = 5000
@@ -36,12 +36,7 @@ save_index_path = "indexes/word2vec_index.faiss"
 save_metadata_path = "indexes/word2vec_metadata.json" 
 
 [colbert]
-model_path = "indexes/colbert/colbert_model.pt"
-faiss_index_path = "indexes/colbert/corpus_index.faiss"
-corpus_ids_path = "indexes/colbert/corpus_embeddings_20250420_114811_ids.json"
-vector_dim = 128
-max_query_length = 64
-bert_model = "bert-base-uncased"
+
 
 [common]
 top_k = 5
